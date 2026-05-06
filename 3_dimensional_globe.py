@@ -135,7 +135,7 @@ def build_globe():
     }, 100);
     """
 
-    fig.write_html("global_market_global.html", post_script=post_script)
+    fig.write_html("global_market_globe.html", post_script=post_script)
     print("SUCCESS: Globe generated with stock index prices and currencies.")
 
 

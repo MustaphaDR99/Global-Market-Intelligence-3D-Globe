@@ -73,7 +73,7 @@ def fetch_regional_data(config, period="5y"):
             city_df[f"{city}_Yield"] = yield_series
             city_df[f"{city}_CPI"] = cpi_series
 
-            # Forward fill the monthly macro data into the daily price gaps
+            # Monthly macroeconomic indicators are forward-filled to match daily financial data frequency
             city_df = city_df.ffill()
             master_frames.append(city_df)
             print(f"Retrivial successfull {city}")
