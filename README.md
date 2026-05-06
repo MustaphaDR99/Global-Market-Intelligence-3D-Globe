@@ -30,10 +30,14 @@ The project tracks the following primary stock market indices to gauge the healt
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/YOUR_USERNAME/GlobalMarketIntelligenceGlobe.git](https://github.com/YOUR_USERNAME/GlobalMarketIntelligenceGlobe.git)
+git clone https://github.com/MustaphaDR99/Global-Market-Intelligence-3D-Globe
 cd GlobalMarketIntelligenceGlobe
 ```
-
-### 1. Run the main.py file from your IDE or run the following command:
-``` bash
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+### 3. Run the Pipeline
+```bash
 python main.py
+```
