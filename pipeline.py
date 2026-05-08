@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+import time
 from fredapi import Fred
 import os
 from dotenv import load_dotenv
@@ -34,7 +35,7 @@ MARKET_CONFIG = {
     "Tokyo": {
         "ticker": "^N225",
         "yield_id": "IRLTLT01JPM156N", # Japan 10Y Yield
-        "cpi_id": "CPALTT01JPM657N"    # Japan CPI
+        "cpi_id": "JPNCPIALLMINMEI"    # Japan CPI
     },
     "Paris": {
         "ticker": "^FCHI",
@@ -52,6 +53,7 @@ def fetch_regional_data(config, period="5y"):
 
     for city, ids in config.items():
         try:
+            time.sleep(1)
             print(f"Processing: {city}...")
 
             # 1. Fetch Market Price (Daily)

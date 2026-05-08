@@ -124,13 +124,30 @@ def build_globe():
     )
 
     # This is the JavaScript injection
-    # Auto-click Play on launch
+    # Auto-plays on launch but kills the animation if the user interacts (clicks/drags)
     post_script = """
     var checkExist = setInterval(function() {
        var playBtn = document.querySelector('.updatemenu-button');
-       if (playBtn) {
-          playBtn.click();
+       var gd = document.getElementsByClassName('plotly-graph-div')[0];
+       
+       if (playBtn && gd && gd._fullLayout) {
+          playBtn.click(); // Auto-start
           clearInterval(checkExist);
+          
+          var resumeTimer;
+          
+          gd.on('plotly_relayout', function() {
+              // Kill the current animation to stop snapping
+              Plotly.animate(gd, [], {mode: 'next'}); 
+              console.log("Animation Paused - User Interaction");
+
+              // Clear existing timer and set a new one to resume after 20s
+              clearTimeout(resumeTimer);
+              resumeTimer = setTimeout(function() {
+                  console.log("Resuming Auto-Rotation...");
+                  playBtn.click();
+              }, 20000); 
+          });
        }
     }, 100);
     """
