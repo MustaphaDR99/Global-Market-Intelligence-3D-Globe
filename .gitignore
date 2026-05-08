@@ -9,7 +9,7 @@ market_insight.csv
 market_predictions.xlsx
 master_market_data.csv
 city_coordinates.json
-global_market_global.html
+global_market_globe.html
 
 # IDE files
 .idea/
