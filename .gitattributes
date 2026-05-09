@@ -1,0 +1,4 @@
+# Prevent HTML files from skewing language statistics
+*.html linguist-detectable=false
+*.csv linguist-detectable=false
+*.json linguist-detectable=false

@@ -4,7 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="9b3b64f9-959a-41b3-b929-3120a84b7643" name="Changes" comment="api key" />
+    <list default="true" id="9b3b64f9-959a-41b3-b929-3120a84b7643" name="Changes" comment="api key">
+      <change afterPath="$PROJECT_DIR$/.gitattributes" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -71,7 +73,7 @@
       <workItem from="1777550575743" duration="4811000" />
       <workItem from="1777666137220" duration="12101000" />
       <workItem from="1778074867539" duration="6610000" />
-      <workItem from="1778255770974" duration="408000" />
+      <workItem from="1778255770974" duration="512000" />
     </task>
     <task id="LOCAL-00001" summary="api key">
       <option name="closed" value="true" />

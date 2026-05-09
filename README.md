@@ -37,7 +37,16 @@ cd GlobalMarketIntelligenceGlobe
 ```bash
 pip install -r requirements.txt
 ```
-### 3. Run the Pipeline
+### 3. Setup Environment Variables
+This project requires a FRED API key to fetch macroeconomic data.
+* **Locate the .env.example file in the root directory**
+* **Rename or copy it to .env**
+* **Open .env and add your API key**:
+```bash
+FRED_API_KEY=your_actual_key_here
+```
+### 4. Run the Pipeline
 ```bash
 python main.py
 ```
+The pipeline will execute all analytics and automatically open a local server at http://127.0.0.1:8000 to display the generated 3D Globe.
