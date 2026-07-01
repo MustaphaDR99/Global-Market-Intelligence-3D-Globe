@@ -1,160 +1,146 @@
+"""
+Reads the pipeline's csv outputs, builds the JS data constants,
+and injects them into the HTML template to produce global_market_globe.html.
+
+Called by main.py after analytics.py and predictions.py have run.
+No external dependencies beyond what's already in requirements.txt.
+"""
+
+
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from geo_utils import get_coordinates
+import json
+import os
+import re
 
-# Mapping cities to their respective currency symbols
-CURRENCY_MAP = {
-    "New_York": "$",
-    "London": "£",
-    "Frankfurt": "€",
-    "Paris": "€",
-    "Tokyo": "¥"
+# Mapping cities as they appear in market_insight.csv to display info
+# Add a new entry here whenever there's a market added to MARKET_CONFIG in pipeline.py
+CITY_MAP = {
+    "New_York":  {"index": "S&P 500",    "ticker": "^GSPC",  "currency": "$"},
+    "London":    {"index": "FTSE 100",   "ticker": "^FTSE",  "currency": "£"},
+    "Frankfurt": {"index": "DAX",        "ticker": "^GDAXI", "currency": "€"},
+    "Tokyo":     {"index": "Nikkei 225", "ticker": "^N225",  "currency": "¥"},
+    "Paris":     {"index": "CAC 40",     "ticker": "^FCHI",  "currency": "€"},
 }
 
+def load_analytics(path="market_insight.csv") -> pd.DataFrame:
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"'{path}' not found. Run analytics.py first or main.py."
+        )
+    return pd.read_csv(path, index_col=0)
 
-def build_globe():
-    try:
-        # Load Data
-        analytics = pd.read_csv("market_insight.csv", index_col=0)
-        mc_summary = pd.read_excel("market_predictions.xlsx", sheet_name="Monte_Carlo_Summary")
-        arima_df = pd.read_excel("market_predictions.xlsx", sheet_name="ARIMA_Forecast", index_col=0)
+def load_predictions(path="market_predictions.xlsx") -> tuple[dict, dict]:
+    """
+    New function that returns from loading phase 3 (predictions):
+        mc_summary - which is the dict of Monte Carlo results for the top market
+        arima_info - which is the dict with last ARIMA forecast price and horizon
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"'{path}' not found. Run predictions.py first or main.py."
+        )
 
-        city_names = list(analytics.index)
-        coords = get_coordinates(city_names)
-        best_city = analytics.index[0]
+    mc_df = pd.read_excel(path, sheet_name="Monte_Carlo_Summary")
+    arima_df = pd.read_excel(path, sheet_name="ARIMA_Forecast", index_col=0)
 
-        # I use .loc with a boolean mask to find the profit probability safely
-        prob_profit = mc_summary.loc[mc_summary['Metric'] == "Probability of Profit", "Value"].values[0]
-        trend = "UP" if arima_df.iloc[-1, 0] > arima_df.iloc[0, 0] else "DOWN"
-    except Exception as e:
-        print(f"Data Loading Error: {e}")
-        return
+    # Monte Carlo sheet has two columns: Metric and Value
+    # Converting it to a dict keyed by Metric for easy lookup
+    mc_dict = dict(zip(mc_df["Metric"], mc_df["Value"]))
 
-    # Animation Parameters
-    n_frames = 250
-    rotation_steps = np.linspace(0, 360, n_frames)
-    pulse_sizes = [18 + 6 * np.sin(x) for x in np.linspace(0, 6 * np.pi, n_frames)]
+    arima_info = {
+        "startForecast": float(arima_df.iloc[0, 0]),
+        "endForecast": float(arima_df.iloc[-1, 0]),
+        "days": len(arima_df),
+    }
 
-    fig = go.Figure()
+    mc_summary = {
+        "startPrice": float(mc_dict.get("Starting Price", 0)),
+        "expectedPrice": float(mc_dict.get("Expected Mean Price", 0)),
+        "worstCase": float(mc_dict.get("Worst Case (5th Pct)", 0)),
+        "bestCase": float(mc_dict.get("Best Case (95th Pct)", 0)),
+        "probProfit": float(mc_dict.get("Probability of Profit", 0)),
+    }
 
-    # Trace 0: Starfield
-    fig.add_trace(go.Scattergeo(
-        lon=np.random.uniform(-180, 180, 300),
-        lat=np.random.uniform(-90, 90, 300),
-        mode='markers',
-        marker=dict(size=1, color="white", opacity=0.3),
-        hoverinfo='skip'
-    ))
+    return mc_summary, arima_info
 
-    # Add city markets with currency symbols from the map
+def load_coordinates(path="city_coordinates.json") -> dict:
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"'{path}' not found. Run geo_utils.get_coordinates() first"
+        )
+    with open(path) as f:
+        return json.load(f)
+
+def build_market_data(analytics: pd.DataFrame, coords: dict, master_csv="master_market_data.csv")
+    """
+    New function that converts the analytics DataFrame into the JavaScript MARKET_DATA array literal.
+    We determin whether the last price is above or below the 20-day moving average.
+    Falls back to 'UP' if master data isn't available.
+    """
+    trend_map = {}
+    if os.path.exists(master_csv):
+        try:
+            df_master = pd.read_csv(master_csv, index_col=0, parese_dates=True)
+            for city in analytics.index:
+                col = f"{city}_Price"
+                if col in df_master.columns:
+                    prices = df_master[col].dropna()
+                    ma20 = prices.rolling(20).mean().iloc[-1]
+                    last = prices.iloc[-1]
+                    trend_map[city] = "UP" if last > ma20 else "DOWN"
+
+        except Exception as e:
+            print(f" Warning: could not compute trend signals - {e}")
+    entries = []
     for city in analytics.index:
-        if city in coords:
-            lat, lon = coords[city]['lat'], coords[city]['lon']
-            stats = analytics.loc[city]
-            currency = CURRENCY_MAP.get(city, "$") # Put '$' if there is no currency
-            color = 'lime' if stats['Sharpe_Ratio'] > 0.4 else 'gold' if stats['Sharpe_Ratio'] > 0.2 else 'crimson'
+        row = analytics.loc[city]
+        meta = CITY_MAP.get(city, {"index": city, "ticker": "N/A", "currency": "$"})
+        coord = coords.get(city, {})
+        trend = trend_map.get(city, "UP")
 
-            if city == best_city:
-                hover_label = (
-                    f"<b>{city} (Top Market)</b><br>"
-                    f"Last Price: {currency}{stats['Last_Price']:,.2f}<br>"
-                    f"Volatility: {stats['Volatility_Risk']:.2%}<br>"
-                    f"Trend: {trend}<br>"
-                    f"Prob. of Profit: {prob_profit:.2%}"
-                )
-            else:
-                hover_label = (
-                    f"<b>{city}</b><br>"
-                    f"Last Price: {currency}{stats['Last_Price']:,.2f}<br>"
-                    f"Sharpe: {stats['Sharpe_Ratio']:.3f}"
-                )
+        # Round to 4dp for cleanliness; prices keep 2dp
+        entry = (
+            "  {\n"
+            f'    city:         "{city}",\n'
+            f'    index:        "{meta["index"]}",\n'
+            f'    ticker:       "{meta["ticker"]}",\n'
+            f'    currency:     "{meta["currency"]}",\n'
+            f'    lat:          {coord.get("lat", 0):.4f},\n'
+            f'    lon:          {coord.get("lon", 0):.4f},\n'
+            f'    lastPrice:    {row["Last_Price"]:.2f},\n'
+            f'    annReturn:    {row["Annual_Return"]:.4f},\n'
+            f'    volatility:   {row["Volatility_Risk"]:.4f},\n'
+            f'    sharpe:       {row["Sharpe_Ratio"]:.4f},\n'
+            f'    trend:        "{trend}"\n'
+            "  }"
+        )
+        entries.append(entry)
 
-            fig.add_trace(go.Scattergeo(
-                lat=[lat], lon=[lon],
-                mode='markers',
-                marker=dict(size=15, color=color, line=dict(width=1, color='white')),
-                text=hover_label,
-                hoverinfo='text',
-                name=city
-            ))
+    return "const MARKET_DATA = [\n" + ",\n".join(entries) + "\n];"
 
-    # Build Animation Frames
-    frames = []
-    for i in range(n_frames):
-        frame_data = [go.Scattergeo(marker=dict(size=float(pulse_sizes[i])))]
-
-        for city_idx, city in enumerate(analytics.index):
-            if city in coords:
-                # All cities pulsate; the top market pulses more intensely
-                size = pulse_sizes[i] if city == best_city else (10 + 3 * np.sin(i * 0.5))
-                frame_data.append(go.Scattergeo(
-                    lat=[coords[city]['lat']], lon=[coords[city]['lon']],
-                    marker=dict(size=float(size))
-                ))
-
-        frames.append(go.Frame(
-            data=frame_data,
-            layout=dict(geo=dict(projection_rotation_lon=rotation_steps[i])),
-            name=f"frame{i}",
-            traces=[city_names.index(best_city) + 1]
-        ))
-
-    fig.frames = frames
-
-    # Layout with hidden Play button (for auto-start) and Pause/Resume toggle
-    fig.update_layout(
-        paper_bgcolor="black", width=900, height=900,
-        margin=dict(l=0, r=0, t=0, b=0),
-        geo=dict(
-            projection_type="orthographic", bgcolor="black",
-            showland=True, landcolor="#111", showcountries=True, countrycolor="#333",
-            projection_scale=0.8
-        ),
-        updatemenus=[dict(
-            type="buttons", showactive=False, visible=False,
-            buttons=[
-                # Hidden button triggered by JavaScript injection
-                dict(label="Play", method="animate", visible=False,
-                     args=[None, dict(frame=dict(duration=30, redraw=True),
-                                      transition=dict(duration=0),
-                                      fromcurrent=True, loop=True)])
-            ]
-        )]
+def build_mc_summary(top_city: str, mc: dict) -> str
+    return (
+        "const MC_SUMMARY = {\n"
+        f'  city:           "{top_city}",\n'
+        f'  startPrice:     {mc["startPrice"]:.2f},\n'
+        f'  expectedPrice:  {mc["expectedPrice"]:.2f},\n'
+        f'  worstCase:      {mc["worstCase"]:.2f},\n'
+        f'  bestCase:       {mc["bestCase"]:.2f},\n'
+        f'  probProfit:     {mc["probProfit"]:.4f}\n'
+        "};"
     )
 
-    # This is the JavaScript injection
-    # Auto-plays on launch but kills the animation if the user interacts (clicks/drags)
-    post_script = """
-    var checkExist = setInterval(function() {
-       var playBtn = document.querySelector('.updatemenu-button');
-       var gd = document.getElementsByClassName('plotly-graph-div')[0];
-       
-       if (playBtn && gd && gd._fullLayout) {
-          playBtn.click(); // Auto-start
-          clearInterval(checkExist);
-          
-          var resumeTimer;
-          
-          gd.on('plotly_relayout', function() {
-              // Kill the current animation to stop snapping
-              Plotly.animate(gd, [], {mode: 'next'}); 
-              console.log("Animation Paused - User Interaction");
+def build_arima(arima: dict) -> str
+    return (
+        "const ARIMA = {\n"
+        f' startForecast: {arima["startForecast"]:.2f},\n'
+        f'  endForecast:    {arima["endForecast"]:.2f},\n'
+        f'  days:           {arima["days"]}\n'
+        "};"
+    )
 
-              // Clear existing timer and set a new one to resume after 20s
-              clearTimeout(resumeTimer);
-              resumeTimer = setTimeout(function() {
-                  console.log("Resuming Auto-Rotation...");
-                  playBtn.click();
-              }, 20000); 
-          });
-       }
-    }, 100);
-    """
-
-    fig.write_html("global_market_globe.html", post_script=post_script)
-    print("SUCCESS: Globe generated with stock index prices and currencies.")
-
+def build_globe()
 
 if __name__ == "__main__":
     build_globe()
